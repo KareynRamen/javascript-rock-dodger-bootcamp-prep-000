@@ -1,5 +1,5 @@
 //@version=6
-indicator("Institutional Fib Confluence — NQ/ES/GC", shorttitle = "FibConf", overlay = true, max_labels_count = 200, max_lines_count = 200, max_boxes_count = 50)
+indicator("Institutional Fib Confluence - NQ/ES/GC", shorttitle = "FibConf", overlay = true, max_labels_count = 200, max_lines_count = 200, max_boxes_count = 50)
 
 // =====================================================================================
 // Structure-break Fibonacci confluence indicator (NQ / ES / GC).
@@ -7,11 +7,11 @@ indicator("Institutional Fib Confluence — NQ/ES/GC", shorttitle = "FibConf", o
 // Anchoring model (matches a manually-drawn break-of-structure Fib):
 //   Anchor 0 ("Entry Zone")  = the swing point that was just broken (the BOS pivot)
 //   Anchor 1 ("Origin")      = the prior opposite swing that started that impulse leg
-//   0.382 / 0.5              = "Confluence Zone" — primary pullback area to look for a
+//   0.382 / 0.5              = "Confluence Zone" - primary pullback area to look for a
 //                              reversal pattern back in the direction of the break
-//   0.786                    = "Breakout Pattern" — deep zone; a close through it means
+//   0.786                    = "Breakout Pattern" - deep zone; a close through it means
 //                              the breakout failed, and the structure is invalidated
-//   -0.27 / -0.618 / -1.272  = TP1 / TP2 / Alpha — staged continuation targets beyond
+//   -0.27 / -0.618 / -1.272  = TP1 / TP2 / Alpha - staged continuation targets beyond
 //                              the Entry Zone, in the direction of the break
 //
 // For a bearish break of structure everything mirrors: Entry Zone sits at the broken
@@ -44,8 +44,8 @@ sessionString    = input.session("0930-1600", "Session (exchange local time)", g
 sessionTimezone  = input.string("America/New_York", "Session Timezone", group = grpSession)
 
 grpFib = "Fib Ratios (your template)"
-rConfluenceA   = input.float(0.382, "Confluence Zone — near bound", group = grpFib, step = 0.001)
-rConfluenceB   = input.float(0.5,   "Confluence Zone — far bound", group = grpFib, step = 0.001)
+rConfluenceA   = input.float(0.382, "Confluence Zone - near bound", group = grpFib, step = 0.001)
+rConfluenceB   = input.float(0.5,   "Confluence Zone - far bound", group = grpFib, step = 0.001)
 rBreakoutPtn   = input.float(0.786, "Breakout Pattern (invalidation)", group = grpFib, step = 0.001)
 rTP1           = input.float(-0.27,  "Take Profit 1", group = grpFib, step = 0.001)
 rTP2           = input.float(-0.618, "Take Profit 2", group = grpFib, step = 0.001)
@@ -83,12 +83,12 @@ grpSig = "Confluence & Risk"
 minConfluence  = input.int(3, "Minimum Confluences Required (of 5)", group = grpSig, minval = 2, maxval = 5)
 cooldownBars   = input.int(10, "Cooldown Between Calls (bars)", group = grpSig, minval = 0)
 atrLen         = input.int(14, "ATR Length (stop/tolerance buffer)", group = grpSig)
-atrMultStop    = input.float(1.0, "ATR Multiplier — Stop Buffer", group = grpSig, step = 0.1)
+atrMultStop    = input.float(1.0, "ATR Multiplier - Stop Buffer", group = grpSig, step = 0.1)
 entryZoneAtrTol = input.float(0.25, "Entry Zone Retest Tolerance (x ATR)", group = grpSig, step = 0.05)
 
 grpDisp = "Display"
 showTable   = input.bool(true, "Show Status Table", group = grpDisp)
-showLevels  = input.bool(true, "Plot Fib Levels + Stop", group = grpDisp)
+showStopLine = input.bool(true, "Plot Stop Loss Line", group = grpDisp)
 showZoneBox = input.bool(true, "Show Confluence Zone Box", group = grpDisp)
 showVwap    = input.bool(true, "Plot Session VWAP", group = grpDisp)
 
@@ -146,19 +146,15 @@ breakoutPtn  = level(rBreakoutPtn)
 tp1          = level(rTP1)
 tp2          = level(rTP2)
 alpha        = level(rAlpha)
-origin       = level(1.0)
 
 var box confBox = na
 if (bullBOS or bearBOS) and showZoneBox
     box.delete(confBox)
     confBox := box.new(bar_index, confTop, bar_index, confBot, border_color = color.new(color.yellow, 40), bgcolor = color.new(color.yellow, 88), extend = extend.right)
 
-plot(showLevels ? entryZone   : na, "Entry Zone",       color = color.new(color.gray, 20))
-plot(showLevels ? breakoutPtn : na, "Breakout Pattern", color = color.new(color.orange, 10))
-plot(showLevels ? tp1         : na, "TP1",              color = color.new(#4fa8e0, 10))
-plot(showLevels ? tp2         : na, "TP2",              color = color.new(color.blue, 10))
-plot(showLevels ? alpha       : na, "Alpha",            color = color.new(color.purple, 10))
-plot(showLevels ? origin      : na, "Origin",           color = color.new(color.gray, 70), style = plot.style_circles)
+// Fib levels (Entry Zone, Breakout Pattern, TP1, TP2, Alpha, Origin) are intentionally
+// not plotted as chart lines -- the Confluence Zone box below is the one visual anchor,
+// and the exact numbers already show up in the call label and status table.
 
 // -------------------------------------------------------------------------- HTF bias
 htfClose = request.security(syminfo.tickerid, htfTimeframe, close, gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
@@ -202,13 +198,13 @@ mfVolume = mfMultiplier * volume
 cmf = math.sum(mfVolume, volLen) / math.sum(volume, volLen)
 
 // Composite volume confirmation: above-average participation AND OBV AND CMF all
-// agreeing with the trade direction — a real volume read, not just "above average".
+// agreeing with the trade direction - a real volume read, not just "above average".
 bullVolConfirm = rvol >= rvolThreshold and obvUp and cmf > 0
 bearVolConfirm = rvol >= rvolThreshold and obvDown and cmf < 0
 
 atr = ta.atr(atrLen)
 
-// VWAP — session-anchored, for visual/institutional reference (resets each session).
+// VWAP - session-anchored, for visual/institutional reference (resets each session).
 vwapVal = ta.vwap(hlc3)
 plot(showVwap ? vwapVal : na, "VWAP", color = color.new(#8a8fa3, 0), linewidth = 1)
 
@@ -222,7 +218,7 @@ bullReversalBar = close > (high + low) / 2 and close > open
 bearReversalBar = close < (high + low) / 2 and close < open
 
 // Liquidity sweep: a wick takes out the recent range extreme (stop hunt) and the bar
-// reclaims it — a stronger tell than a plain reversal bar on its own.
+// reclaims it - a stronger tell than a plain reversal bar on its own.
 sweepRefLow  = ta.lowest(low[1], sweepLookback)
 sweepRefHigh = ta.highest(high[1], sweepLookback)
 bullSweep = low < sweepRefLow and close > sweepRefLow
@@ -263,7 +259,7 @@ otherCorr2     = isNQ ? ta.correlation(close, gcClose, corrLen) : isES ? ta.corr
 otherCorr2Name = isNQ ? "GC" : isES ? "GC" : isGC ? "NQ" : ""
 
 // ------------------------------------------------------------------- Confluence (of 5)
-// Single source of truth for both the score and the human-readable "why" — used live
+// Single source of truth for both the score and the human-readable "why" - used live
 // in the status table and again, unchanged, on the call label when a call fires.
 buildReasons(isCallBull) =>
     momentumHit = isCallBull ? bullMomentum : bearMomentum
@@ -293,7 +289,7 @@ bullFactors = bullScore
 bearFactors = bearScore
 
 // A close through the Breakout Pattern level (0.786) toward the origin means the
-// break of structure failed — invalidate the current bias.
+// break of structure failed - invalidate the current bias.
 breakoutPtnBroken = isBull ? close < breakoutPtn : isBear ? close > breakoutPtn : false
 
 var int lastSignalBar = na
@@ -313,7 +309,7 @@ bullStop = breakoutPtn - atr * atrMultStop
 bearStop = breakoutPtn + atr * atrMultStop
 
 stopLevel = isBull ? bullStop : isBear ? bearStop : na
-plot(showLevels ? stopLevel : na, "Stop Loss", color = color.new(color.red, 0), linewidth = 2, style = plot.style_linebr)
+plot(showStopLine ? stopLevel : na, "Stop Loss", color = color.new(color.red, 0), linewidth = 2, style = plot.style_linebr)
 
 // ------------------------------------------------------------------------------ Labels
 buildCallText(isCallBull, factors, reasonsStr, entry, stop, t1, t2, a) =>
@@ -321,7 +317,7 @@ buildCallText(isCallBull, factors, reasonsStr, entry, stop, t1, t2, a) =>
     rr1 = math.abs(t1 - entry) / math.abs(entry - stop)
     rr2 = math.abs(t2 - entry) / math.abs(entry - stop)
     rrA = math.abs(a - entry) / math.abs(entry - stop)
-    dir + " — " + syminfo.root + " (" + str.tostring(factors) + "/5)\n" +
+    dir + " - " + syminfo.root + " (" + str.tostring(factors) + "/5)\n" +
      "Why: " + reasonsStr + "\n" +
      "Entry " + str.tostring(entry, format.mintick) + " | Stop " + str.tostring(stop, format.mintick) + "\n" +
      "TP1 " + str.tostring(t1, format.mintick) + " (R " + str.tostring(rr1, "#.#") + ")" +
@@ -339,12 +335,12 @@ if bearCall
     alert(bearText, alert.freq_once_per_bar_close)
 
 // --------------------------------------------------------------------------- Alerts
-// Named conditions (fixed message — pick one of these in the Create Alert dialog for a
+// Named conditions (fixed message - pick one of these in the Create Alert dialog for a
 // simple ping), or select "Any alert() function call" to get the full dynamic message
 // with real entry/stop/TP/Alpha levels built above.
-alertcondition(bullCall, "Institutional Long Call", "Institutional Fib Confluence: LONG setup on {{ticker}} — {{close}}")
-alertcondition(bearCall, "Institutional Short Call", "Institutional Fib Confluence: SHORT setup on {{ticker}} — {{close}}")
-alertcondition(breakoutPtnBroken, "Structure Invalidated", "Institutional Fib Confluence: Breakout Pattern level broken on {{ticker}} — bias invalidated")
+alertcondition(bullCall, "Institutional Long Call", "Institutional Fib Confluence: LONG setup on {{ticker}} - {{close}}")
+alertcondition(bearCall, "Institutional Short Call", "Institutional Fib Confluence: SHORT setup on {{ticker}} - {{close}}")
+alertcondition(breakoutPtnBroken, "Structure Invalidated", "Institutional Fib Confluence: Breakout Pattern level broken on {{ticker}} - bias invalidated")
 
 // --------------------------------------------------------------------------- Status table
 var table statusTable = table.new(position.top_right, 2, 9, border_width = 1)
@@ -352,16 +348,16 @@ var table statusTable = table.new(position.top_right, 2, 9, border_width = 1)
 if showTable and barstate.islast
     biasCore  = isBull ? "BULL BOS" : isBear ? "BEAR BOS" : "NONE"
     htfSuffix = not requireHtfAlignment or not (isBull or isBear) ? "" : (isBull and htfUptrend) or (isBear and htfDowntrend) ? " (HTF ok)" : " (HTF conflict)"
-    zoneLabel = inConfluenceZone ? "Confluence" : entryZoneTouch ? "Entry Retest" : "—"
+    zoneLabel = inConfluenceZone ? "Confluence" : entryZoneTouch ? "Entry Retest" : "-"
     activeFactors = isBull ? bullFactors : isBear ? bearFactors : 0
     activeReasons = isBull ? bullReasons : isBear ? bearReasons : ""
-    confText  = str.tostring(activeFactors) + "/5" + (activeReasons != "" ? " — " + activeReasons : "")
+    confText  = str.tostring(activeFactors) + "/5" + (activeReasons != "" ? " - " + activeReasons : "")
     activeStop = isBull ? bullStop : isBear ? bearStop : na
-    stopText  = (isBull or isBear) ? str.tostring(activeStop, format.mintick) : "—"
+    stopText  = (isBull or isBear) ? str.tostring(activeStop, format.mintick) : "-"
     rr1 = (isBull or isBear) ? math.abs(tp1 - close) / math.abs(close - activeStop) : na
     rr2 = (isBull or isBear) ? math.abs(tp2 - close) / math.abs(close - activeStop) : na
     rrA = (isBull or isBear) ? math.abs(alpha - close) / math.abs(close - activeStop) : na
-    rrText = (isBull or isBear) ? str.tostring(rr1, "#.#") + " / " + str.tostring(rr2, "#.#") + " / " + str.tostring(rrA, "#.#") : "—"
+    rrText = (isBull or isBear) ? str.tostring(rr1, "#.#") + " / " + str.tostring(rr2, "#.#") + " / " + str.tostring(rrA, "#.#") : "-"
     corrText = otherCorr1Name + " " + str.tostring(otherCorr1, "#.##") + " / " + otherCorr2Name + " " + str.tostring(otherCorr2, "#.##")
     obvArrow = obvUp ? "UP" : obvDown ? "DOWN" : "FLAT"
     volText  = "RVOL " + str.tostring(rvol, "#.#") + "x | OBV " + obvArrow + " | CMF " + str.tostring(cmf, "#.##")
@@ -370,7 +366,7 @@ if showTable and barstate.islast
     trendText = "ADX " + str.tostring(adxVal, "#.#") + (trending ? " (trending)" : " (choppy)")
 
     table.cell(statusTable, 0, 0, "Bias", bgcolor = color.new(color.gray, 60))
-    table.cell(statusTable, 1, 0, syminfo.root + " — " + biasCore + htfSuffix, bgcolor = color.new(color.gray, 60))
+    table.cell(statusTable, 1, 0, syminfo.root + " - " + biasCore + htfSuffix, bgcolor = color.new(color.gray, 60))
     table.cell(statusTable, 0, 1, "Zone")
     table.cell(statusTable, 1, 1, zoneLabel)
     table.cell(statusTable, 0, 2, "Confluence")
