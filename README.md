@@ -1,6 +1,11 @@
 JavaScript Rock Dodger
 ---
 
+> Also in this repo: [`overflow-trading/`](./overflow-trading) is an unrelated
+> standalone site — an interactive trainer for learning order flow, footprint
+> reading, and technical analysis. Open `overflow-trading/index.html` in a
+> browser (or serve the folder with any static server) to use it.
+
 ## Objectives
 
 1. Use JavaScript to build a rock-dodging game

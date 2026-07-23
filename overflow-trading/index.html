@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Flow Trainer</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">&#9646;&#9646;</span>
+      <span class="brand-name">Order Flow Trainer</span>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab-btn active" data-view="home">Home</button>
+      <button class="tab-btn" data-view="lessons">Lessons</button>
+      <button class="tab-btn" data-view="footprint">Footprint Drill</button>
+      <button class="tab-btn" data-view="tape">Tape Reading</button>
+      <button class="tab-btn" data-view="patterns">Chart Patterns</button>
+      <button class="tab-btn" data-view="srzones">S/R Zones</button>
+      <button class="tab-btn" data-view="progress">Progress</button>
+    </nav>
+  </header>
+
+  <main id="app">
+
+    <section class="view active" id="view-home">
+      <div class="hero">
+        <h1>Learn to read order flow. Then drill it until it's fast.</h1>
+        <p class="lead">
+          This trainer pairs short lessons on order flow &amp; footprint reading with
+          timed drills, so the concepts stop being trivia and start being pattern
+          recognition. Everything runs locally in your browser &mdash; your progress
+          is saved on this device.
+        </p>
+        <div class="hero-grid">
+          <div class="hero-card">
+            <h3>1. Read</h3>
+            <p>Start in <strong>Lessons</strong> for the vocabulary: bid/ask, delta,
+            imbalance, absorption, volume profile.</p>
+          </div>
+          <div class="hero-card">
+            <h3>2. Drill</h3>
+            <p>Practice in <strong>Footprint Drill</strong>, <strong>Tape Reading</strong>,
+            <strong>Chart Patterns</strong>, and <strong>S/R Zones</strong>.</p>
+          </div>
+          <div class="hero-card">
+            <h3>3. Track</h3>
+            <p>Check <strong>Progress</strong> for accuracy per skill and keep
+            grinding the weak ones.</p>
+          </div>
+        </div>
+        <button class="cta" data-goto="lessons">Start Learning &rarr;</button>
+      </div>
+    </section>
+
+    <section class="view" id="view-lessons">
+      <h2>Lessons</h2>
+      <p class="section-intro">Short reference material. Expand a topic, read it, move on &mdash; the drills are where the skill actually builds.</p>
+      <div id="lessons-list" class="accordion"></div>
+    </section>
+
+    <section class="view" id="view-footprint">
+      <h2>Footprint Drill</h2>
+      <p class="section-intro">
+        A footprint splits one candle into its price levels and shows how much
+        volume traded at the <span class="tag-buy">Ask (buy)</span> vs the
+        <span class="tag-sell">Bid (sell)</span> at each level. Read the grid below,
+        then decide what it's telling you.
+      </p>
+      <div id="footprint-app" class="drill"></div>
+    </section>
+
+    <section class="view" id="view-tape">
+      <h2>Tape Reading Drill</h2>
+      <p class="section-intro">
+        Time &amp; sales prints stream in below. Watch the size and side of each
+        print, then call which side was more aggressive before the running delta
+        gives it away.
+      </p>
+      <div id="tape-app" class="drill"></div>
+    </section>
+
+    <section class="view" id="view-patterns">
+      <h2>Chart Pattern Recognition</h2>
+      <p class="section-intro">
+        Classic technical-analysis patterns, generated fresh each round. Name the
+        pattern to lock in the shape.
+      </p>
+      <div id="patterns-app" class="drill"></div>
+    </section>
+
+    <section class="view" id="view-srzones">
+      <h2>Support / Resistance Zones</h2>
+      <p class="section-intro">
+        Click directly on the chart where you think the key support or resistance
+        zone sits. You've got a margin of error &mdash; but not much.
+      </p>
+      <div id="srzones-app" class="drill"></div>
+    </section>
+
+    <section class="view" id="view-progress">
+      <h2>Progress</h2>
+      <div id="progress-app"></div>
+    </section>
+
+  </main>
+
+  <footer class="page-footer">
+    <p>Educational tool for practicing order-flow and technical-analysis reading. Not financial advice &mdash; nothing here is a trade signal.</p>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
