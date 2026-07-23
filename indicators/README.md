@@ -56,13 +56,18 @@ it reads as a band the way you actually draw it.
    counter-trend lower-timeframe noise.
 5. If a **Session Filter** is enabled, the bar must fall inside the
    configured session window (default 09:30–16:00 America/New_York).
-6. At least `minConfluence` (default 3, out of 7 now) of the following must
-   also agree: EMA trend direction, being specifically in the Confluence
-   Zone (vs. only the shallower Entry Zone), an RSI momentum turn, a MACD
-   momentum turn, above-average volume, cross-market correlation, and a
-   **liquidity sweep** — a wick that takes out the recent range extreme
-   (stop hunt) and reclaims it same bar, a stronger tell than a plain
-   reversal candle on its own.
+6. At least `minConfluence` (default 3, out of 5) of the following must also
+   agree: being specifically in the Confluence Zone (vs. only the shallower
+   Entry Zone), a Momentum turn (RSI turning up/down from a soft area, or a
+   MACD histogram turn — either counts, so this is one factor, not two),
+   above-average Volume, Cross-Market correlation, and a **Liquidity
+   Sweep** — a wick that takes out the recent range extreme (stop hunt) and
+   reclaims it same bar, a stronger tell than a plain reversal candle on
+   its own.
+
+The status table shows this live, even before a call fires — a "Confluence"
+row like `2/5 — Confluence Zone, Volume` tells you exactly what's present
+and what's still missing, not just a bare score.
 
 ### Cross-market correlation
 
@@ -82,34 +87,42 @@ both other symbols for transparency (e.g. "ES 0.71 / GC -0.35") — a useful
 sanity check on whether the assumed regime actually holds right now.
 
 This is a regime heuristic, not a statistical guarantee — treat it as one
-input among seven, not a standalone signal.
+input among five, not a standalone signal.
 
 ## Output
 
+Kept deliberately lean — one clear reason for the call, one stop, one set
+of targets, not a wall of raw indicator values.
+
 - The five single-price levels plotted as lines (Entry Zone, Breakout
-  Pattern, TP1, TP2, Alpha) plus the Confluence Zone as a shaded box
-- A status table (top-right): current structure (bull/bear BOS or none),
-  HTF bias and whether it's aligned, which zone price is in, RSI, MACD,
-  volume, cross-market regime read + real correlation coefficients, and
-  the live confluence score out of 7
+  Pattern, TP1, TP2, Alpha), the Confluence Zone as a shaded box, and a
+  dedicated **Stop Loss** line once a bias is active (beyond the Breakout
+  Pattern level, buffered by ATR)
+- A 6-row status table (top-right): Bias (symbol + BOS direction + whether
+  HTF agrees), Zone, Confluence (score out of 5 *and* which factors are
+  present, live, not just at signal time), Stop, R:R to TP1/TP2/Alpha, and
+  the cross-market correlation coefficients
 - A labeled call box when a signal fires, e.g.:
 
   ```
-  INSTITUTIONAL LONG — NQ
-  Confluence 5/7: Confluence Zone, MACD Turn, Volume, Cross-Market, Liquidity Sweep
-  Entry 18420.25 | Stop 18355.00 | TP1 18475.00 | TP2 18610.00 | Alpha 18720.00
-  R:R to TP1 1.9 | HTF Up
+  LONG — NQ (4/5)
+  Why: Confluence Zone, Volume, Cross-Market, Liquidity Sweep
+  Entry 18420.25 | Stop 18355.00
+  TP1 18475.00 (R 0.8) | TP2 18610.00 (R 2.9) | Alpha 18720.00 (R 4.6)
   ```
 
-  Stop = just beyond the Breakout Pattern level, buffered by ATR.
+  The R:R column is meant to be read as a staircase — TP1 is usually close
+  to 1:1, and Alpha stretches out toward 1:3+ depending on how wide the
+  actual swing was; it's computed live from your ATR-buffered stop, not
+  forced to hit exact ratios.
 - Two alert mechanisms:
   - `alertcondition()` entries ("Institutional Long Call", "Institutional
     Short Call", "Structure Invalidated") — pick one directly in the
     Create Alert dialog for a fixed, simple message.
   - `alert()` calls fired at the same moments with the **full dynamic
-    message** shown above (real entry/stop/TP/Alpha numbers, not just
-    `{{close}}`) — select "Any alert() function call" as the condition to
-    get this richer notification.
+    message** shown above (real entry/stop/TP/Alpha numbers and the "Why",
+    not just `{{close}}`) — select "Any alert() function call" as the
+    condition to get this richer notification.
 
 ## Setup on TradingView
 

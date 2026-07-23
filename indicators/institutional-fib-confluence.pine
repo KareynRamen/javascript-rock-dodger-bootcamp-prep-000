@@ -17,11 +17,10 @@ indicator("Institutional Fib Confluence — NQ/ES/GC", shorttitle = "Fib Conflue
 // For a bearish break of structure everything mirrors: Entry Zone sits at the broken
 // swing low, targets extend below it, Confluence/Breakout Pattern sit above it.
 //
-// A call only fires once price is back in a pullback zone (Confluence or a retest of
-// the Entry Zone) with a reversal bar, the higher-timeframe bias agrees (if required),
-// AND at least `minConfluence` of the independent factors below also line up:
-// EMA trend, confluence-zone quality, RSI turn, MACD turn, volume, cross-market
-// correlation, and a liquidity sweep into the pullback.
+// A call fires once price is in a pullback zone with a reversal bar, the HTF bias
+// agrees (if required), and at least `minConfluence` of 5 factors agree: Confluence
+// Zone quality, Momentum turn (RSI or MACD), Volume, Cross-market correlation, and a
+// Liquidity Sweep. The call label always states which of those five it is ("Why:").
 // =====================================================================================
 
 // ---------------------------------------------------------------------------- Inputs
@@ -50,8 +49,8 @@ grpTa = "Technical Confirmation"
 rsiLen    = input.int(14, "RSI Length", group = grpTa)
 rsiOB     = input.int(70, "RSI Overbought", group = grpTa)
 rsiOS     = input.int(30, "RSI Oversold", group = grpTa)
-emaFastLen = input.int(21, "Fast EMA", group = grpTa)
-emaSlowLen = input.int(50, "Slow EMA", group = grpTa)
+emaFastLen = input.int(21, "Fast EMA (HTF & cross-market)", group = grpTa)
+emaSlowLen = input.int(50, "Slow EMA (HTF & cross-market)", group = grpTa)
 macdFast   = input.int(12, "MACD Fast", group = grpTa)
 macdSlow   = input.int(26, "MACD Slow", group = grpTa)
 macdSigLen = input.int(9, "MACD Signal", group = grpTa)
@@ -65,7 +64,7 @@ gcSymbol = input.symbol("COMEX:GC1!", "GC Symbol", group = grpCorr)
 corrLen  = input.int(20, "Correlation Length", group = grpCorr)
 
 grpSig = "Confluence & Risk"
-minConfluence  = input.int(3, "Minimum Confluences Required", group = grpSig, minval = 2, maxval = 7)
+minConfluence  = input.int(3, "Minimum Confluences Required (of 5)", group = grpSig, minval = 2, maxval = 5)
 cooldownBars   = input.int(10, "Cooldown Between Calls (bars)", group = grpSig, minval = 0)
 atrLen         = input.int(14, "ATR Length (stop/tolerance buffer)", group = grpSig)
 atrMultStop    = input.float(1.0, "ATR Multiplier — Stop Buffer", group = grpSig, step = 0.1)
@@ -73,7 +72,7 @@ entryZoneAtrTol = input.float(0.25, "Entry Zone Retest Tolerance (x ATR)", group
 
 grpDisp = "Display"
 showTable   = input.bool(true, "Show Status Table", group = grpDisp)
-showLevels  = input.bool(true, "Plot Fib Levels", group = grpDisp)
+showLevels  = input.bool(true, "Plot Fib Levels + Stop", group = grpDisp)
 showZoneBox = input.bool(true, "Show Confluence Zone Box", group = grpDisp)
 
 // ------------------------------------------------------------------ Structure (BOS)
@@ -146,12 +145,6 @@ htfEmaSlow = ta.ema(htfClose, emaSlowLen)
 htfUptrend   = htfEmaFast > htfEmaSlow
 htfDowntrend = htfEmaFast < htfEmaSlow
 
-// ------------------------------------------------------------------------- Trend
-emaFast = ta.ema(close, emaFastLen)
-emaSlow = ta.ema(close, emaSlowLen)
-emaUptrend   = emaFast > emaSlow
-emaDowntrend = emaFast < emaSlow
-
 // -------------------------------------------------------------------- Momentum TA
 rsi = ta.rsi(close, rsiLen)
 bullRsiConfirm = rsi > rsi[1] and rsi[1] <= rsiOS + 15
@@ -160,6 +153,9 @@ bearRsiConfirm = rsi < rsi[1] and rsi[1] >= rsiOB - 15
 [macdLine, macdSignal, macdHist] = ta.macd(close, macdFast, macdSlow, macdSigLen)
 bullMacdConfirm = macdLine > macdSignal and macdHist > macdHist[1]
 bearMacdConfirm = macdLine < macdSignal and macdHist < macdHist[1]
+
+bullMomentum = bullRsiConfirm or bullMacdConfirm
+bearMomentum = bearRsiConfirm or bearMacdConfirm
 
 volMA = ta.sma(volume, volLen)
 volConfirm = volume > volMA
@@ -210,16 +206,40 @@ gcUp = gcClose > gcEmaFast
 bullCorrConfirm = useCorrelation ? (isNQ ? esUp and not gcUp : isES ? nqUp and not gcUp : isGC ? not esUp and not nqUp : false) : false
 bearCorrConfirm = useCorrelation ? (isNQ ? not esUp and gcUp : isES ? not nqUp and gcUp : isGC ? esUp and nqUp : false) : false
 
-// Real correlation coefficients (display only — the boolean regime read above still
-// drives the confluence factor).
+// Real correlation coefficients, shown in the table for transparency.
 otherCorr1     = isNQ ? ta.correlation(close, esClose, corrLen) : isES ? ta.correlation(close, nqClose, corrLen) : isGC ? ta.correlation(close, esClose, corrLen) : na
 otherCorr1Name = isNQ ? "ES" : isES ? "NQ" : isGC ? "ES" : ""
 otherCorr2     = isNQ ? ta.correlation(close, gcClose, corrLen) : isES ? ta.correlation(close, gcClose, corrLen) : isGC ? ta.correlation(close, nqClose, corrLen) : na
 otherCorr2Name = isNQ ? "GC" : isES ? "GC" : isGC ? "NQ" : ""
 
-// ------------------------------------------------------------------- Confluence count
-bullFactors = (emaUptrend ? 1 : 0) + (inConfluenceZone ? 1 : 0) + (bullRsiConfirm ? 1 : 0) + (bullMacdConfirm ? 1 : 0) + (volConfirm ? 1 : 0) + (bullCorrConfirm ? 1 : 0) + (bullSweep ? 1 : 0)
-bearFactors = (emaDowntrend ? 1 : 0) + (inConfluenceZone ? 1 : 0) + (bearRsiConfirm ? 1 : 0) + (bearMacdConfirm ? 1 : 0) + (volConfirm ? 1 : 0) + (bearCorrConfirm ? 1 : 0) + (bearSweep ? 1 : 0)
+// ------------------------------------------------------------------- Confluence (of 5)
+// Single source of truth for both the score and the human-readable "why" — used live
+// in the status table and again, unchanged, on the call label when a call fires.
+buildReasons(isCallBull) =>
+    momentumHit = isCallBull ? bullMomentum : bearMomentum
+    corrHit     = isCallBull ? bullCorrConfirm : bearCorrConfirm
+    sweepHit    = isCallBull ? bullSweep : bearSweep
+    tags = array.new<string>()
+    if inConfluenceZone
+        array.push(tags, "Confluence Zone")
+    else if entryZoneTouch
+        array.push(tags, "Entry Zone Retest")
+    if momentumHit
+        array.push(tags, "Momentum")
+    if volConfirm
+        array.push(tags, "Volume")
+    if corrHit
+        array.push(tags, "Cross-Market")
+    if sweepHit
+        array.push(tags, "Liquidity Sweep")
+    score = (inConfluenceZone ? 1 : 0) + (momentumHit ? 1 : 0) + (volConfirm ? 1 : 0) + (corrHit ? 1 : 0) + (sweepHit ? 1 : 0)
+    [score, array.join(tags, ", ")]
+
+[bullScore, bullReasons] = buildReasons(true)
+[bearScore, bearReasons] = buildReasons(false)
+
+bullFactors = bullScore
+bearFactors = bearScore
 
 // A close through the Breakout Pattern level (0.786) toward the origin means the
 // break of structure failed — invalidate the current bias.
@@ -241,44 +261,29 @@ if bullCall or bearCall
 bullStop = breakoutPtn - atr * atrMultStop
 bearStop = breakoutPtn + atr * atrMultStop
 
-bullRR = math.abs(tp1 - close) / math.abs(close - bullStop)
-bearRR = math.abs(close - tp1) / math.abs(bearStop - close)
+stopLevel = isBull ? bullStop : isBear ? bearStop : na
+plot(showLevels ? stopLevel : na, "Stop Loss", color = color.new(color.red, 0), linewidth = 2, style = plot.style_linebr)
 
 // ------------------------------------------------------------------------------ Labels
-buildCallText(isCallBull, factors, entry, stop, t1, t2, a, rr) =>
+buildCallText(isCallBull, factors, reasonsStr, entry, stop, t1, t2, a) =>
     dir = isCallBull ? "LONG" : "SHORT"
-    zoneName = inConfluenceZone ? "Confluence Zone" : "Entry Zone Retest"
-    tags = array.new<string>()
-    array.push(tags, zoneName)
-    if isCallBull ? emaUptrend : emaDowntrend
-        array.push(tags, "EMA Trend")
-    if isCallBull ? bullRsiConfirm : bearRsiConfirm
-        array.push(tags, "RSI Turn")
-    if isCallBull ? bullMacdConfirm : bearMacdConfirm
-        array.push(tags, "MACD Turn")
-    if volConfirm
-        array.push(tags, "Volume")
-    if isCallBull ? bullCorrConfirm : bearCorrConfirm
-        array.push(tags, "Cross-Market")
-    if isCallBull ? bullSweep : bearSweep
-        array.push(tags, "Liquidity Sweep")
-    "INSTITUTIONAL " + dir + " — " + syminfo.root + "\n" +
-     "Confluence " + str.tostring(factors) + "/7: " + array.join(tags, ", ") + "\n" +
-     "Entry " + str.tostring(entry, format.mintick) +
-     " | Stop " + str.tostring(stop, format.mintick) +
-     " | TP1 " + str.tostring(t1, format.mintick) +
-     " | TP2 " + str.tostring(t2, format.mintick) +
-     " | Alpha " + str.tostring(a, format.mintick) + "\n" +
-     "R:R to TP1 " + str.tostring(rr, "#.##") +
-     " | HTF " + (htfUptrend ? "Up" : htfDowntrend ? "Down" : "Flat")
+    rr1 = math.abs(t1 - entry) / math.abs(entry - stop)
+    rr2 = math.abs(t2 - entry) / math.abs(entry - stop)
+    rrA = math.abs(a - entry) / math.abs(entry - stop)
+    dir + " — " + syminfo.root + " (" + str.tostring(factors) + "/5)\n" +
+     "Why: " + reasonsStr + "\n" +
+     "Entry " + str.tostring(entry, format.mintick) + " | Stop " + str.tostring(stop, format.mintick) + "\n" +
+     "TP1 " + str.tostring(t1, format.mintick) + " (R " + str.tostring(rr1, "#.#") + ")" +
+     " | TP2 " + str.tostring(t2, format.mintick) + " (R " + str.tostring(rr2, "#.#") + ")" +
+     " | Alpha " + str.tostring(a, format.mintick) + " (R " + str.tostring(rrA, "#.#") + ")"
 
 if bullCall
-    bullText = buildCallText(true, bullFactors, close, bullStop, tp1, tp2, alpha, bullRR)
+    bullText = buildCallText(true, bullFactors, bullReasons, close, bullStop, tp1, tp2, alpha)
     label.new(bar_index, low - atr, bullText, style = label.style_label_up, color = color.new(color.green, 10), textcolor = color.white, size = size.small)
     alert(bullText, alert.freq_once_per_bar_close)
 
 if bearCall
-    bearText = buildCallText(false, bearFactors, close, bearStop, tp1, tp2, alpha, bearRR)
+    bearText = buildCallText(false, bearFactors, bearReasons, close, bearStop, tp1, tp2, alpha)
     label.new(bar_index, high + atr, bearText, style = label.style_label_down, color = color.new(color.red, 10), textcolor = color.white, size = size.small)
     alert(bearText, alert.freq_once_per_bar_close)
 
@@ -291,34 +296,35 @@ alertcondition(bearCall, "Institutional Short Call", "Institutional Fib Confluen
 alertcondition(breakoutPtnBroken, "Structure Invalidated", "Institutional Fib Confluence: Breakout Pattern level broken on {{ticker}} — bias invalidated")
 
 // --------------------------------------------------------------------------- Status table
-var table statusTable = table.new(position.top_right, 2, 10, border_width = 1)
+var table statusTable = table.new(position.top_right, 2, 6, border_width = 1)
 
 if showTable and barstate.islast
-    biasLabel = isBull ? "BULL BOS" : isBear ? "BEAR BOS" : "NONE"
+    biasCore  = isBull ? "BULL BOS" : isBear ? "BEAR BOS" : "NONE"
+    htfSuffix = not requireHtfAlignment or not (isBull or isBear) ? "" : (isBull and htfUptrend) or (isBear and htfDowntrend) ? " (HTF ok)" : " (HTF conflict)"
     zoneLabel = inConfluenceZone ? "Confluence" : entryZoneTouch ? "Entry Retest" : "—"
-    htfState  = htfUptrend ? "UP" : htfDowntrend ? "DOWN" : "FLAT"
-    htfAlign  = not requireHtfAlignment ? "filter off" : (isBull and htfUptrend) or (isBear and htfDowntrend) ? "aligned" : (isBull or isBear) ? "conflict" : "—"
-    corrText  = otherCorr1Name + " " + str.tostring(otherCorr1, "#.##") + " / " + otherCorr2Name + " " + str.tostring(otherCorr2, "#.##")
-    table.cell(statusTable, 0, 0, "Symbol", bgcolor = color.new(color.gray, 60))
-    table.cell(statusTable, 1, 0, syminfo.root, bgcolor = color.new(color.gray, 60))
-    table.cell(statusTable, 0, 1, "Structure")
-    table.cell(statusTable, 1, 1, biasLabel)
-    table.cell(statusTable, 0, 2, "HTF Bias")
-    table.cell(statusTable, 1, 2, htfState + " (" + htfAlign + ")")
-    table.cell(statusTable, 0, 3, "Zone")
-    table.cell(statusTable, 1, 3, zoneLabel)
-    table.cell(statusTable, 0, 4, "RSI")
-    table.cell(statusTable, 1, 4, str.tostring(rsi, "#.#"))
-    table.cell(statusTable, 0, 5, "MACD")
-    table.cell(statusTable, 1, 5, macdLine > macdSignal ? "Bull" : "Bear")
-    table.cell(statusTable, 0, 6, "Volume")
-    table.cell(statusTable, 1, 6, volConfirm ? "Above Avg" : "Below Avg")
-    table.cell(statusTable, 0, 7, "Cross-Market")
-    table.cell(statusTable, 1, 7, useCorrelation ? (bullCorrConfirm ? "Bull Confirm" : bearCorrConfirm ? "Bear Confirm" : "Neutral") : "Off")
-    table.cell(statusTable, 0, 8, "Correlation r")
-    table.cell(statusTable, 1, 8, corrText)
-    table.cell(statusTable, 0, 9, "Confluence", bgcolor = color.new(color.gray, 60))
-    table.cell(statusTable, 1, 9, str.tostring(isBull ? bullFactors : isBear ? bearFactors : 0) + "/7", bgcolor = color.new(color.gray, 60))
+    activeFactors = isBull ? bullFactors : isBear ? bearFactors : 0
+    activeReasons = isBull ? bullReasons : isBear ? bearReasons : ""
+    confText  = str.tostring(activeFactors) + "/5" + (activeReasons != "" ? " — " + activeReasons : "")
+    activeStop = isBull ? bullStop : isBear ? bearStop : na
+    stopText  = (isBull or isBear) ? str.tostring(activeStop, format.mintick) : "—"
+    rr1 = (isBull or isBear) ? math.abs(tp1 - close) / math.abs(close - activeStop) : na
+    rr2 = (isBull or isBear) ? math.abs(tp2 - close) / math.abs(close - activeStop) : na
+    rrA = (isBull or isBear) ? math.abs(alpha - close) / math.abs(close - activeStop) : na
+    rrText = (isBull or isBear) ? str.tostring(rr1, "#.#") + " / " + str.tostring(rr2, "#.#") + " / " + str.tostring(rrA, "#.#") : "—"
+    corrText = otherCorr1Name + " " + str.tostring(otherCorr1, "#.##") + " / " + otherCorr2Name + " " + str.tostring(otherCorr2, "#.##")
+
+    table.cell(statusTable, 0, 0, "Bias", bgcolor = color.new(color.gray, 60))
+    table.cell(statusTable, 1, 0, syminfo.root + " — " + biasCore + htfSuffix, bgcolor = color.new(color.gray, 60))
+    table.cell(statusTable, 0, 1, "Zone")
+    table.cell(statusTable, 1, 1, zoneLabel)
+    table.cell(statusTable, 0, 2, "Confluence")
+    table.cell(statusTable, 1, 2, confText)
+    table.cell(statusTable, 0, 3, "Stop")
+    table.cell(statusTable, 1, 3, stopText)
+    table.cell(statusTable, 0, 4, "R:R (TP1/TP2/Alpha)")
+    table.cell(statusTable, 1, 4, rrText)
+    table.cell(statusTable, 0, 5, "Correlation")
+    table.cell(statusTable, 1, 5, corrText)
 
 // ---------------------------------------------------------------- Invalidation reset
 if breakoutPtnBroken
