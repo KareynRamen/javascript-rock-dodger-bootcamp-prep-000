@@ -39,9 +39,12 @@ Confluence/Breakout Pattern sit above it.
 
 All six ratios are exposed as inputs (`Fib Ratios (your template)` group) in
 case you tune them per instrument — defaults are your exact values
-(0.382, 0.5, 0.786, -0.27, -0.618, -1.272). The Confluence Zone is now drawn
-as a shaded box (extends right automatically) instead of two bare lines, so
-it reads as a band the way you actually draw it.
+(0.382, 0.5, 0.786, -0.27, -0.618, -1.272). The Confluence Zone is drawn as a
+shaded box (extends right automatically). The other levels (Entry Zone,
+Breakout Pattern, TP1, TP2, Alpha) are **not** plotted as chart lines — they
+still drive all the logic, but the chart stays clean, with the exact numbers
+appearing in the call label and status table instead of six permanent lines
+running across the whole chart.
 
 ## How a call fires
 
@@ -126,10 +129,10 @@ input among five, not a standalone signal.
 Kept deliberately lean — one clear reason for the call, one stop, one set
 of targets, not a wall of raw indicator values.
 
-- The five single-price levels plotted as lines (Entry Zone, Breakout
-  Pattern, TP1, TP2, Alpha), the Confluence Zone as a shaded box, and a
-  dedicated **Stop Loss** line once a bias is active (beyond the Breakout
-  Pattern level, buffered by ATR)
+- On the chart: the Confluence Zone as a shaded box, a dedicated **Stop
+  Loss** line once a bias is active (beyond the Breakout Pattern level,
+  buffered by ATR), and (optionally) session VWAP — deliberately just two
+  or three visual elements, not a line for every fib ratio
 - A 9-row status table (top-right): Bias (symbol + BOS direction + whether
   HTF agrees), Zone, Confluence (score out of 5 *and* which factors are
   present, live, not just at signal time), Stop, R:R to TP1/TP2/Alpha,
