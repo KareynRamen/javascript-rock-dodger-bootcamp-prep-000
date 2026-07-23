@@ -363,7 +363,7 @@ if showTable and barstate.islast
     rrA = (isBull or isBear) ? math.abs(alpha - close) / math.abs(close - activeStop) : na
     rrText = (isBull or isBear) ? str.tostring(rr1, "#.#") + " / " + str.tostring(rr2, "#.#") + " / " + str.tostring(rrA, "#.#") : "—"
     corrText = otherCorr1Name + " " + str.tostring(otherCorr1, "#.##") + " / " + otherCorr2Name + " " + str.tostring(otherCorr2, "#.##")
-    obvArrow = obvUp ? "↑" : obvDown ? "↓" : "→"
+    obvArrow = obvUp ? "UP" : obvDown ? "DOWN" : "FLAT"
     volText  = "RVOL " + str.tostring(rvol, "#.#") + "x | OBV " + obvArrow + " | CMF " + str.tostring(cmf, "#.##")
     vwapDiff = close - vwapVal
     vwapText = close > vwapVal ? "Above (+" + str.tostring(vwapDiff, format.mintick) + ")" : close < vwapVal ? "Below (" + str.tostring(vwapDiff, format.mintick) + ")" : "At"
