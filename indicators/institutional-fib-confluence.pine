@@ -2,23 +2,37 @@
 indicator("Institutional Fib Confluence — NQ/ES/GC", shorttitle = "Fib Confluence", overlay = true, max_labels_count = 200, max_lines_count = 200)
 
 // =====================================================================================
-// Institutional-style confluence indicator.
-// Applies to a chart of NQ1!, ES1!, or GC1! (root symbol auto-detected via syminfo.root).
-// A "call" fires only when at least `minConfluence` of the following line up:
-//   1) Trend direction (EMA fast/slow)
-//   2) Price sitting in the 38.2%-78.6% Fibonacci retracement zone with a reversal bar
-//   3) RSI momentum turn
-//   4) MACD momentum turn
-//   5) Above-average volume (participation)
-//   6) Cross-market correlation/regime confirmation from the other two futures
-// Trend + Fib zone are prerequisites for a setup to exist at all, so reaching the
-// default minimum of 3 always means at least one independent TA or cross-market
-// confirmation on top of the base pattern.
+// Structure-break Fibonacci confluence indicator (NQ / ES / GC).
+//
+// Anchoring model (matches a manually-drawn break-of-structure Fib):
+//   Anchor 0 ("Entry Zone")  = the swing point that was just broken (the BOS pivot)
+//   Anchor 1 ("Origin")      = the prior opposite swing that started that impulse leg
+//   0.382 / 0.5              = "Confluence Zone" — primary pullback area to look for a
+//                              reversal pattern back in the direction of the break
+//   0.786                    = "Breakout Pattern" — deep zone; a close through it means
+//                              the breakout failed, and the structure is invalidated
+//   -0.27 / -0.618 / -1.272  = TP1 / TP2 / Alpha — staged continuation targets beyond
+//                              the Entry Zone, in the direction of the break
+//
+// For a bearish break of structure everything mirrors: Entry Zone sits at the broken
+// swing low, targets extend below it, Confluence/Breakout Pattern sit above it.
+//
+// A call only fires once price is back in a pullback zone (Confluence or a retest of
+// the Entry Zone) with a reversal bar, AND at least `minConfluence` of the independent
+// TA/cross-market factors below also line up.
 // =====================================================================================
 
 // ---------------------------------------------------------------------------- Inputs
-grpFib = "Fibonacci Retracement"
-swingLen           = input.int(20, "Swing Lookback (bars)", group = grpFib, minval = 5)
+grpStruct = "Structure (Break of Structure)"
+pivotLen = input.int(10, "Swing Pivot Lookback (bars each side)", group = grpStruct, minval = 2)
+
+grpFib = "Fib Ratios (your template)"
+rConfluenceA   = input.float(0.382, "Confluence Zone — near bound", group = grpFib, step = 0.001)
+rConfluenceB   = input.float(0.5,   "Confluence Zone — far bound", group = grpFib, step = 0.001)
+rBreakoutPtn   = input.float(0.786, "Breakout Pattern (invalidation)", group = grpFib, step = 0.001)
+rTP1           = input.float(-0.27,  "Take Profit 1", group = grpFib, step = 0.001)
+rTP2           = input.float(-0.618, "Take Profit 2", group = grpFib, step = 0.001)
+rAlpha         = input.float(-1.272, "Alpha (final target)", group = grpFib, step = 0.001)
 
 grpTa = "Technical Confirmation"
 rsiLen    = input.int(14, "RSI Length", group = grpTa)
@@ -36,53 +50,83 @@ useCorrelation = input.bool(true, "Require Cross-Market Confirmation Factor", gr
 esSymbol = input.symbol("CME_MINI:ES1!", "ES Symbol", group = grpCorr)
 nqSymbol = input.symbol("CME_MINI:NQ1!", "NQ Symbol", group = grpCorr)
 gcSymbol = input.symbol("COMEX:GC1!", "GC Symbol", group = grpCorr)
-corrLen  = input.int(20, "Correlation Length", group = grpCorr)
 
 grpSig = "Confluence & Risk"
 minConfluence  = input.int(3, "Minimum Confluences Required", group = grpSig, minval = 2, maxval = 6)
 cooldownBars   = input.int(10, "Cooldown Between Calls (bars)", group = grpSig, minval = 0)
-atrLen         = input.int(14, "ATR Length (stop distance)", group = grpSig)
-atrMultStop    = input.float(1.5, "ATR Multiplier — Stop", group = grpSig, step = 0.1)
-extPct         = input.float(0.272, "Stretch Target Extension", group = grpSig, step = 0.01)
+atrLen         = input.int(14, "ATR Length (stop/tolerance buffer)", group = grpSig)
+atrMultStop    = input.float(1.0, "ATR Multiplier — Stop Buffer", group = grpSig, step = 0.1)
+entryZoneAtrTol = input.float(0.25, "Entry Zone Retest Tolerance (x ATR)", group = grpSig, step = 0.05)
 
 grpDisp = "Display"
 showTable  = input.bool(true, "Show Status Table", group = grpDisp)
 showLevels = input.bool(true, "Plot Fib Levels", group = grpDisp)
 
-// ---------------------------------------------------------------------- Fib levels
-swingHigh   = ta.highest(high, swingLen)
-swingLow    = ta.lowest(low, swingLen)
-swingRange  = swingHigh - swingLow
+// ------------------------------------------------------------------ Structure (BOS)
+ph = ta.pivothigh(pivotLen, pivotLen)
+pl = ta.pivotlow(pivotLen, pivotLen)
 
-fib236 = swingHigh - swingRange * 0.236
-fib382 = swingHigh - swingRange * 0.382
-fib50  = swingHigh - swingRange * 0.5
-fib618 = swingHigh - swingRange * 0.618
-fib786 = swingHigh - swingRange * 0.786
+var float lastPH = na
+var int lastPHBar = na
+var float lastPL = na
+var int lastPLBar = na
 
-zoneTop = fib382
-zoneBot = fib786
+if not na(ph)
+    lastPH := ph
+    lastPHBar := bar_index - pivotLen
+if not na(pl)
+    lastPL := pl
+    lastPLBar := bar_index - pivotLen
 
-plot(showLevels ? fib236 : na, "Fib 23.6", color = color.new(color.gray, 40), style = plot.style_circles)
-plot(showLevels ? fib382 : na, "Fib 38.2", color = color.new(color.orange, 20))
-plot(showLevels ? fib50  : na, "Fib 50.0", color = color.new(color.yellow, 20))
-plot(showLevels ? fib618 : na, "Fib 61.8", color = color.new(color.orange, 20))
-plot(showLevels ? fib786 : na, "Fib 78.6", color = color.new(color.gray, 40), style = plot.style_circles)
+bullBOS = not na(lastPH) and not na(lastPL) and lastPHBar > lastPLBar and ta.crossover(close, lastPH)
+bearBOS = not na(lastPH) and not na(lastPL) and lastPLBar > lastPHBar and ta.crossunder(close, lastPL)
 
-nearestFibName() =>
-    d236 = math.abs(close - fib236)
-    d382 = math.abs(close - fib382)
-    d50  = math.abs(close - fib50)
-    d618 = math.abs(close - fib618)
-    d786 = math.abs(close - fib786)
-    dMin = math.min(d236, math.min(d382, math.min(d50, math.min(d618, d786))))
-    dMin == d236 ? "23.6%" : dMin == d382 ? "38.2%" : dMin == d50 ? "50.0%" : dMin == d618 ? "61.8%" : "78.6%"
+var string bias = ""
+var float anchor0 = na
+var float anchor1 = na
+
+if bullBOS
+    bias := "bull"
+    anchor0 := lastPH
+    anchor1 := lastPL
+if bearBOS
+    bias := "bear"
+    anchor0 := lastPL
+    anchor1 := lastPH
+
+isBull = bias == "bull"
+isBear = bias == "bear"
+
+range_ = isBull ? anchor0 - anchor1 : isBear ? anchor1 - anchor0 : na
+
+level(r) =>
+    isBull ? anchor0 - range_ * r : isBear ? anchor0 + range_ * r : na
+
+entryZone    = level(0.0)
+confA        = level(rConfluenceA)
+confB        = level(rConfluenceB)
+confTop      = math.max(confA, confB)
+confBot      = math.min(confA, confB)
+breakoutPtn  = level(rBreakoutPtn)
+tp1          = level(rTP1)
+tp2          = level(rTP2)
+alpha        = level(rAlpha)
+origin       = level(1.0)
+
+plot(showLevels ? entryZone   : na, "Entry Zone",     color = color.new(color.gray, 20))
+plot(showLevels ? confA       : na, "Confluence A",   color = color.new(color.yellow, 10))
+plot(showLevels ? confB       : na, "Confluence B",   color = color.new(#d8c96a, 10))
+plot(showLevels ? breakoutPtn : na, "Breakout Pattern", color = color.new(color.orange, 10))
+plot(showLevels ? tp1         : na, "TP1",             color = color.new(#4fa8e0, 10))
+plot(showLevels ? tp2         : na, "TP2",             color = color.new(color.blue, 10))
+plot(showLevels ? alpha       : na, "Alpha",           color = color.new(color.purple, 10))
+plot(showLevels ? origin      : na, "Origin",          color = color.new(color.gray, 70), style = plot.style_circles)
 
 // ------------------------------------------------------------------------- Trend
 emaFast = ta.ema(close, emaFastLen)
 emaSlow = ta.ema(close, emaSlowLen)
-isUptrend   = emaFast > emaSlow
-isDowntrend = emaFast < emaSlow
+emaUptrend   = emaFast > emaSlow
+emaDowntrend = emaFast < emaSlow
 
 // -------------------------------------------------------------------- Momentum TA
 rsi = ta.rsi(close, rsiLen)
@@ -98,15 +142,14 @@ volConfirm = volume > volMA
 
 atr = ta.atr(atrLen)
 
-// -------------------------------------------------------------- Fib pullback setup
-pulledIntoZone   = low <= zoneTop and low >= zoneBot
-pulledIntoZoneUp = high >= zoneBot and high <= zoneTop
+// --------------------------------------------------------------- Pullback zone / bar
+inConfluenceZone = (isBull or isBear) and low <= confTop and high >= confBot
+entryZoneTouch   = (isBull or isBear) and math.abs(close - entryZone) <= atr * entryZoneAtrTol
+
+inPullbackZone = inConfluenceZone or entryZoneTouch
 
 bullReversalBar = close > (high + low) / 2 and close > open
 bearReversalBar = close < (high + low) / 2 and close < open
-
-bullFibSetup = isUptrend and pulledIntoZone and bullReversalBar
-bearFibSetup = isDowntrend and pulledIntoZoneUp and bearReversalBar
 
 // --------------------------------------------------------- Cross-market correlation
 isES = syminfo.root == "ES"
@@ -125,84 +168,91 @@ esUp = esClose > esEmaFast
 nqUp = nqClose > nqEmaFast
 gcUp = gcClose > gcEmaFast
 
-// Cross-asset regime read:
-//  - Equity vs equity: the other index trending the same way validates the tape (not a lone-stock/lone-future move).
-//  - Equity vs gold: a clean risk-on rally should NOT be accompanied by an aggressive gold bid, and a clean
-//    risk-off breakdown is validated by gold being bid (flight to safety). Gold itself is read in reverse:
-//    it should be rallying when equities are weak, and offered when equities are strong.
+// Equity vs equity: the other index trending the same way validates the tape.
+// Equity vs gold: a clean risk-on rally shouldn't be accompanied by an aggressive gold
+// bid, and a clean risk-off breakdown is validated by gold being bid (flight to safety).
+// Gold itself is read in reverse: it should rally when equities are weak, and sell off
+// when equities are strong.
 bullCorrConfirm = useCorrelation ? (isNQ ? esUp and not gcUp : isES ? nqUp and not gcUp : isGC ? not esUp and not nqUp : false) : false
 bearCorrConfirm = useCorrelation ? (isNQ ? not esUp and gcUp : isES ? not nqUp and gcUp : isGC ? esUp and nqUp : false) : false
 
 // ------------------------------------------------------------------- Confluence count
-bullFactors = (isUptrend ? 1 : 0) + (bullFibSetup ? 1 : 0) + (bullRsiConfirm ? 1 : 0) + (bullMacdConfirm ? 1 : 0) + (volConfirm ? 1 : 0) + (bullCorrConfirm ? 1 : 0)
-bearFactors = (isDowntrend ? 1 : 0) + (bearFibSetup ? 1 : 0) + (bearRsiConfirm ? 1 : 0) + (bearMacdConfirm ? 1 : 0) + (volConfirm ? 1 : 0) + (bearCorrConfirm ? 1 : 0)
+bullFactors = (emaUptrend ? 1 : 0) + (inConfluenceZone ? 1 : 0) + (bullRsiConfirm ? 1 : 0) + (bullMacdConfirm ? 1 : 0) + (volConfirm ? 1 : 0) + (bullCorrConfirm ? 1 : 0)
+bearFactors = (emaDowntrend ? 1 : 0) + (inConfluenceZone ? 1 : 0) + (bearRsiConfirm ? 1 : 0) + (bearMacdConfirm ? 1 : 0) + (volConfirm ? 1 : 0) + (bearCorrConfirm ? 1 : 0)
+
+// A close through the Breakout Pattern level (0.786) toward the origin means the
+// break of structure failed — invalidate the current bias.
+breakoutPtnBroken = isBull ? close < breakoutPtn : isBear ? close > breakoutPtn : false
 
 var int lastSignalBar = na
 cooledDown = na(lastSignalBar) or (bar_index - lastSignalBar) > cooldownBars
 
-bullCall = bullFibSetup and bullFactors >= minConfluence and cooledDown and barstate.isconfirmed
-bearCall = bearFibSetup and bearFactors >= minConfluence and cooledDown and barstate.isconfirmed
+bullSetup = isBull and inPullbackZone and bullReversalBar and not breakoutPtnBroken
+bearSetup = isBear and inPullbackZone and bearReversalBar and not breakoutPtnBroken
+
+bullCall = bullSetup and bullFactors >= minConfluence and cooledDown and barstate.isconfirmed
+bearCall = bearSetup and bearFactors >= minConfluence and cooledDown and barstate.isconfirmed
 
 if bullCall or bearCall
     lastSignalBar := bar_index
 
 // ------------------------------------------------------------------------ Trade plan
-bullStop   = math.min(low, zoneBot) - atr * atrMultStop
-bullTarget = swingHigh
-bullStretch = swingHigh + swingRange * extPct
-bullRR = math.abs(bullTarget - close) / math.abs(close - bullStop)
+bullStop = breakoutPtn - atr * atrMultStop
+bearStop = breakoutPtn + atr * atrMultStop
 
-bearStop   = math.max(high, zoneTop) + atr * atrMultStop
-bearTarget = swingLow
-bearStretch = swingLow - swingRange * extPct
-bearRR = math.abs(close - bearTarget) / math.abs(bearStop - close)
+bullRR = math.abs(tp1 - close) / math.abs(close - bullStop)
+bearRR = math.abs(close - tp1) / math.abs(bearStop - close)
 
 // ------------------------------------------------------------------------------ Labels
-buildCallText(isBull, factors, entry, stop, target, stretch, rr) =>
-    dir = isBull ? "LONG" : "SHORT"
+buildCallText(isCallBull, factors, entry, stop, t1, t2, a, rr) =>
+    dir = isCallBull ? "LONG" : "SHORT"
+    zoneName = inConfluenceZone ? "Confluence Zone" : "Entry Zone Retest"
     tags = array.new<string>()
-    if isUptrend or isDowntrend
-        array.push(tags, "Trend")
-    array.push(tags, "Fib " + nearestFibName())
-    if isBull ? bullRsiConfirm : bearRsiConfirm
+    array.push(tags, zoneName)
+    if isCallBull ? emaUptrend : emaDowntrend
+        array.push(tags, "EMA Trend")
+    if isCallBull ? bullRsiConfirm : bearRsiConfirm
         array.push(tags, "RSI Turn")
-    if isBull ? bullMacdConfirm : bearMacdConfirm
+    if isCallBull ? bullMacdConfirm : bearMacdConfirm
         array.push(tags, "MACD Turn")
     if volConfirm
         array.push(tags, "Volume")
-    if isBull ? bullCorrConfirm : bearCorrConfirm
+    if isCallBull ? bullCorrConfirm : bearCorrConfirm
         array.push(tags, "Cross-Market")
     "INSTITUTIONAL " + dir + " — " + syminfo.root + "\n" +
      "Confluence " + str.tostring(factors) + "/6: " + array.join(tags, ", ") + "\n" +
      "Entry " + str.tostring(entry, format.mintick) +
      " | Stop " + str.tostring(stop, format.mintick) +
-     " | Target " + str.tostring(target, format.mintick) +
-     " | Stretch " + str.tostring(stretch, format.mintick) + "\n" +
-     "R:R " + str.tostring(rr, "#.##")
+     " | TP1 " + str.tostring(t1, format.mintick) +
+     " | TP2 " + str.tostring(t2, format.mintick) +
+     " | Alpha " + str.tostring(a, format.mintick) + "\n" +
+     "R:R to TP1 " + str.tostring(rr, "#.##")
 
 if bullCall
-    label.new(bar_index, low - atr, buildCallText(true, bullFactors, close, bullStop, bullTarget, bullStretch, bullRR),
+    label.new(bar_index, low - atr, buildCallText(true, bullFactors, close, bullStop, tp1, tp2, alpha, bullRR),
          style = label.style_label_up, color = color.new(color.green, 10), textcolor = color.white, size = size.small)
 
 if bearCall
-    label.new(bar_index, high + atr, buildCallText(false, bearFactors, close, bearStop, bearTarget, bearStretch, bearRR),
+    label.new(bar_index, high + atr, buildCallText(false, bearFactors, close, bearStop, tp1, tp2, alpha, bearRR),
          style = label.style_label_down, color = color.new(color.red, 10), textcolor = color.white, size = size.small)
 
 // --------------------------------------------------------------------------- Alerts
 alertcondition(bullCall, "Institutional Long Call", "Institutional Fib Confluence: LONG setup on {{ticker}} — {{close}}")
 alertcondition(bearCall, "Institutional Short Call", "Institutional Fib Confluence: SHORT setup on {{ticker}} — {{close}}")
+alertcondition(breakoutPtnBroken, "Structure Invalidated", "Institutional Fib Confluence: Breakout Pattern level broken on {{ticker}} — bias invalidated")
 
 // --------------------------------------------------------------------------- Status table
 var table statusTable = table.new(position.top_right, 2, 8, border_width = 1)
 
 if showTable and barstate.islast
-    bias = isUptrend ? "UP" : isDowntrend ? "DOWN" : "FLAT"
+    biasLabel = isBull ? "BULL BOS" : isBear ? "BEAR BOS" : "NONE"
+    zoneLabel = inConfluenceZone ? "Confluence" : entryZoneTouch ? "Entry Retest" : "—"
     table.cell(statusTable, 0, 0, "Symbol", bgcolor = color.new(color.gray, 60))
     table.cell(statusTable, 1, 0, syminfo.root, bgcolor = color.new(color.gray, 60))
-    table.cell(statusTable, 0, 1, "Trend")
-    table.cell(statusTable, 1, 1, bias)
-    table.cell(statusTable, 0, 2, "Fib Zone")
-    table.cell(statusTable, 1, 2, nearestFibName() + (pulledIntoZone or pulledIntoZoneUp ? " (in zone)" : ""))
+    table.cell(statusTable, 0, 1, "Structure")
+    table.cell(statusTable, 1, 1, biasLabel)
+    table.cell(statusTable, 0, 2, "Zone")
+    table.cell(statusTable, 1, 2, zoneLabel)
     table.cell(statusTable, 0, 3, "RSI")
     table.cell(statusTable, 1, 3, str.tostring(rsi, "#.#"))
     table.cell(statusTable, 0, 4, "MACD")
@@ -212,4 +262,8 @@ if showTable and barstate.islast
     table.cell(statusTable, 0, 6, "Cross-Market")
     table.cell(statusTable, 1, 6, useCorrelation ? (bullCorrConfirm ? "Bull Confirm" : bearCorrConfirm ? "Bear Confirm" : "Neutral") : "Off")
     table.cell(statusTable, 0, 7, "Confluence", bgcolor = color.new(color.gray, 60))
-    table.cell(statusTable, 1, 7, str.tostring(math.max(bullFactors, bearFactors)) + "/6", bgcolor = color.new(color.gray, 60))
+    table.cell(statusTable, 1, 7, str.tostring(isBull ? bullFactors : isBear ? bearFactors : 0) + "/6", bgcolor = color.new(color.gray, 60))
+
+// ---------------------------------------------------------------- Invalidation reset
+if breakoutPtnBroken
+    bias := ""

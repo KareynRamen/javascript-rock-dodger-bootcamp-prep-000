@@ -1,97 +1,115 @@
 # Institutional Fib Confluence — NQ / ES / GC
 
-A TradingView Pine Script (v6) indicator that combines Fibonacci retracement,
-multi-factor technical analysis, and cross-market correlation into a single
-confluence score. It only prints a trade "call" when enough independent
-signals line up — the way a discretionary desk would stack confirmations
-before sizing into a position, not on any single signal alone.
+A TradingView Pine Script (v6) indicator that replicates a break-of-structure
+Fibonacci retracement — anchored off the swing point that was just broken,
+not a generic rolling high/low — combined with multi-factor TA and
+cross-market correlation into a single confluence score. It only prints a
+trade "call" when enough independent signals line up, the way a
+discretionary desk stacks confirmations before sizing into a position.
 
 File: [`institutional-fib-confluence.pine`](./institutional-fib-confluence.pine)
 
-## How it decides to call a trade
+## The Fib model (matches your manual template)
 
-For every bar it evaluates up to 6 factors per direction:
+Anchors:
+- **Anchor 0 — "Entry Zone"**: the swing pivot that was just broken (the
+  break-of-structure point). Detected automatically from pivot highs/lows
+  (`Swing Pivot Lookback` bars each side) — when price crosses back over a
+  confirmed swing high that formed after the last swing low, that's a
+  bullish BOS (mirrored for bearish).
+- **Anchor 1 — "Origin"**: the opposite swing that started the impulse leg
+  leading into the break. Unlabeled on the chart, but it's what the ratios
+  are measured against.
 
-1. **Trend** — fast EMA vs. slow EMA
-2. **Fibonacci zone** — price pulled back into the 38.2%–78.6% retracement
-   zone of the last `swingLen` bars and printed a reversal bar
-3. **RSI momentum turn**
-4. **MACD momentum turn**
-5. **Volume** above its moving average (participation)
-6. **Cross-market correlation** — the other two futures confirming the
-   same market regime (see below)
+Named levels (ratio → meaning, matching your color scheme):
 
-Trend and the Fib zone are prerequisites for a setup to exist at all, so the
-default `minConfluence = 3` always means the base pattern *plus* at least one
-independent confirmation. Raise it to 4–6 for a stricter, lower-frequency,
-higher-conviction filter.
+| Ratio | Zone | Color | Meaning |
+|---|---|---|---|
+| 0.382 / 0.5 | Confluence Zone | yellow / tan | Primary pullback area — look for a reversal pattern here to enter back in the direction of the break |
+| 0.786 | Breakout Pattern | orange | Deep zone; a close through it invalidates the break (structure reset) |
+| 0 | Entry Zone | grey | The BOS pivot itself — a shallower retest entry |
+| -0.27 | Take Profit 1 | light blue | First staged target beyond the Entry Zone |
+| -0.618 | Take Profit 2 | blue | Second staged target |
+| -1.272 | Alpha | purple | Final target — the expected end of the breakout move |
 
-### Cross-market correlation logic
+For a bearish break everything mirrors exactly as you described: Entry Zone
+sits at the broken swing low, TP1/TP2/Alpha extend below it, and
+Confluence/Breakout Pattern sit above it.
 
-The script pulls the other two symbols via `request.security` (confirmed
-bars only, no lookahead) regardless of which chart it's on:
+All six ratios are exposed as inputs (`Fib Ratios (your template)` group) in
+case you tune them per instrument — defaults are your exact values
+(0.382, 0.5, 0.786, -0.27, -0.618, -1.272).
+
+## How a call fires
+
+1. Price must be in a pullback zone: inside the Confluence Zone, or
+   retesting the Entry Zone (within an ATR-scaled tolerance).
+2. That bar must close as a reversal bar in the direction of the break.
+3. The Breakout Pattern level must not have been violated (that would mean
+   the structure already failed).
+4. At least `minConfluence` (default 3) of the following must also agree:
+   EMA trend direction, being specifically in the Confluence Zone (vs. only
+   the shallower Entry Zone), an RSI momentum turn, a MACD momentum turn,
+   above-average volume, and cross-market correlation (below).
+
+### Cross-market correlation
+
+Pulls the other two futures via `request.security` (confirmed bars, no
+lookahead) regardless of which chart it's on:
 
 - **NQ vs. ES**: the other index trending the same direction validates the
   move isn't isolated to one instrument.
 - **Equities vs. GC**: a clean risk-on rally shouldn't be accompanied by an
-  aggressive gold bid; a clean risk-off breakdown is validated by gold being
-  bid (flight to safety). When the chart itself is GC, the logic is
-  inverted — gold up is confirmed by both equity indices being weak, and
-  vice versa.
+  aggressive gold bid; a clean risk-off breakdown is validated by gold
+  being bid (flight to safety). On a GC chart the read is inverted — gold
+  up is confirmed by both equity indices being weak, and vice versa.
 
-This is a heuristic regime read, not a statistical guarantee — correlations
-between these instruments shift with the macro backdrop (rate regime, USD
-strength, etc.), so treat it as one input, not gospel.
+This is a regime heuristic, not a statistical guarantee — treat it as one
+input among six, not a standalone signal.
 
 ## Output
 
-- Fibonacci levels plotted on the chart
-- A status table (top-right) showing live trend/RSI/MACD/volume/correlation
-  readings and the current confluence score out of 6
-- Labeled call boxes when a signal fires, e.g.:
+- The seven levels plotted on the chart, in your colors
+- A status table (top-right): current structure (bull/bear BOS or none),
+  which zone price is in, RSI, MACD, volume, cross-market read, and the
+  live confluence score out of 6
+- A labeled call box when a signal fires, e.g.:
 
   ```
   INSTITUTIONAL LONG — NQ
-  Confluence 4/6: Trend, Fib 61.8%, MACD Turn, Cross-Market
-  Entry 18420.25 | Stop 18355.00 | Target 18610.00 | Stretch 18463.00
-  R:R 2.9
+  Confluence 4/6: Confluence Zone, MACD Turn, Volume, Cross-Market
+  Entry 18420.25 | Stop 18355.00 | TP1 18475.00 | TP2 18610.00 | Alpha 18720.00
+  R:R to TP1 1.9
   ```
 
-  Stop = beyond the fib zone/swing extreme, buffered by ATR. Target = the
-  opposing swing extreme. Stretch = a 27.2% Fibonacci extension beyond it.
-- Two `alertcondition()`s ("Institutional Long Call" / "Institutional Short
-  Call") so you can wire TradingView alerts to email/webhook/app push.
+  Stop = just beyond the Breakout Pattern level, buffered by ATR.
+- Three `alertcondition()`s: "Institutional Long Call", "Institutional Short
+  Call", and "Structure Invalidated" (fires when the Breakout Pattern level
+  is broken and the bias resets) — wire these to TradingView alerts.
 
 ## Setup on TradingView
 
-1. Open TradingView → Pine Editor → **New indicator** → paste in the
-   contents of `institutional-fib-confluence.pine` → **Add to chart**.
-2. Add it to a chart on `CME_MINI:NQ1!` (NQ), `CME_MINI:ES1!` (ES), or
-   `COMEX:GC1!` (GC). It auto-detects which one it's on via `syminfo.root`
-   and adjusts the correlation logic accordingly. Repeat per-symbol — Pine
-   indicators run per chart, so you'll want one instance on each of the
-   three charts to watch all of them at once.
-3. In the indicator's settings, confirm the **ES / NQ / GC Symbol** inputs
-   under "Cross-Market Correlation" point at the contracts/months you
-   actually trade (continuous contracts `NQ1!`/`ES1!`/`GC1!` are the
-   defaults).
-4. Right-click the chart → **Add Alert** → Condition: this indicator →
-   choose "Institutional Long Call" or "Institutional Short Call" →
-   set your notification method (popup/email/webhook/app).
-5. Tune `Minimum Confluences Required`, the swing lookback, and the ATR
-   stop multiplier to match the instrument's typical range and your risk
-   tolerance — defaults are a reasonable starting point, not a fitted
-   backtest result.
+1. Pine Editor → **New indicator** → paste in the file contents → **Add to
+   chart**.
+2. Add it to `CME_MINI:NQ1!`, `CME_MINI:ES1!`, and `COMEX:GC1!` charts
+   separately (Pine runs per chart) — it auto-detects which one it's on via
+   `syminfo.root` and adjusts the correlation read accordingly.
+3. Confirm the ES/NQ/GC symbol inputs under "Cross-Market Correlation"
+   point at the contracts you actually trade.
+4. Right-click chart → **Add Alert** → Condition: this indicator → pick
+   "Institutional Long Call" / "Short Call" / "Structure Invalidated" →
+   set notification method.
+5. Tune `Swing Pivot Lookback` to match how far back a "swing" should look
+   on your timeframe (smaller = more frequent, noisier BOS signals; larger
+   = fewer, more significant ones).
 
 ## Notes and limitations
 
-- The Fibonacci swing is a rolling N-bar high/low, not a true ZigZag pivot —
-  simple and robust, but it will redraw as the rolling window moves. Treat
-  the plotted levels as "current context," not a fixed historical anchor.
-- This is a signal/confluence engine, not a backtested strategy. It doesn't
-  size positions, manage open trades, or account for slippage/commissions.
-  Validate on the TradingView **Strategy Tester** (or paper trade) on your
-  specific contracts and timeframe before risking capital.
-- Cross-market correlations are regime-dependent and can invert; the
-  correlation factor is one input among six, not a standalone signal.
+- Swing pivots confirm `pivotLen` bars after they occur (standard for any
+  pivot-based structure detection) — very recent swings aren't known
+  immediately, only once enough bars have passed on the right side.
+- This is a signal/confluence engine, not a backtested strategy — it
+  doesn't size positions or manage open trades. Validate on the TradingView
+  Strategy Tester or paper trade before risking capital.
+- Cross-market correlations are regime-dependent and can invert.
 - Educational/informational tool only — not financial advice.
