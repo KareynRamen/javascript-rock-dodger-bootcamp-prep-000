@@ -1,5 +1,5 @@
 //@version=6
-indicator("Institutional Fib Confluence — NQ/ES/GC", shorttitle = "Fib Confluence", overlay = true, max_labels_count = 200, max_lines_count = 200, max_boxes_count = 50)
+indicator("Institutional Fib Confluence — NQ/ES/GC", shorttitle = "FibConf", overlay = true, max_labels_count = 200, max_lines_count = 200, max_boxes_count = 50)
 
 // =====================================================================================
 // Structure-break Fibonacci confluence indicator (NQ / ES / GC).
@@ -21,6 +21,12 @@ indicator("Institutional Fib Confluence — NQ/ES/GC", shorttitle = "Fib Conflue
 // agrees (if required), and at least `minConfluence` of 5 factors agree: Confluence
 // Zone quality, Momentum turn (RSI or MACD), Volume, Cross-market correlation, and a
 // Liquidity Sweep. The call label always states which of those five it is ("Why:").
+//
+// Volume itself is a composite, not a single check: relative volume vs. its average,
+// On-Balance Volume vs. its own trend, and Chaikin Money Flow must all agree with the
+// trade direction. VWAP is plotted for reference, and ADX/DMI trend strength is an
+// optional filter (like HTF/session) that can require a trending regime without
+// changing the /5 scoring.
 // =====================================================================================
 
 // ---------------------------------------------------------------------------- Inputs
@@ -54,7 +60,17 @@ emaSlowLen = input.int(50, "Slow EMA (HTF & cross-market)", group = grpTa)
 macdFast   = input.int(12, "MACD Fast", group = grpTa)
 macdSlow   = input.int(26, "MACD Slow", group = grpTa)
 macdSigLen = input.int(9, "MACD Signal", group = grpTa)
-volLen     = input.int(20, "Volume MA Length", group = grpTa)
+
+grpVol = "Volume Analysis"
+volLen         = input.int(20, "Volume / CMF / OBV Length", group = grpVol)
+rvolThreshold  = input.float(1.2, "Relative Volume Threshold (x average)", group = grpVol, step = 0.1)
+obvTrendLen    = input.int(20, "OBV Trend EMA Length", group = grpVol)
+
+grpTrend = "Trend Strength (ADX/DMI)"
+requireTrendStrength = input.bool(false, "Require Trending Regime (ADX)", group = grpTrend)
+adxLen         = input.int(14, "DMI Length", group = grpTrend)
+adxSmoothing   = input.int(14, "ADX Smoothing", group = grpTrend)
+adxThreshold   = input.int(20, "ADX Threshold", group = grpTrend)
 
 grpCorr = "Cross-Market Correlation (Institutional Confirmation)"
 useCorrelation = input.bool(true, "Require Cross-Market Confirmation Factor", group = grpCorr)
@@ -74,6 +90,7 @@ grpDisp = "Display"
 showTable   = input.bool(true, "Show Status Table", group = grpDisp)
 showLevels  = input.bool(true, "Plot Fib Levels + Stop", group = grpDisp)
 showZoneBox = input.bool(true, "Show Confluence Zone Box", group = grpDisp)
+showVwap    = input.bool(true, "Plot Session VWAP", group = grpDisp)
 
 // ------------------------------------------------------------------ Structure (BOS)
 ph = ta.pivothigh(pivotLen, pivotLen)
@@ -91,8 +108,13 @@ if not na(pl)
     lastPL := pl
     lastPLBar := bar_index - pivotLen
 
-bullBOS = not na(lastPH) and not na(lastPL) and lastPHBar > lastPLBar and ta.crossover(close, lastPH)
-bearBOS = not na(lastPH) and not na(lastPL) and lastPLBar > lastPHBar and ta.crossunder(close, lastPL)
+// Hoisted out of the conditional so these always evaluate on every bar (Pine flags
+// ta.* calls embedded inside a chained "and" as potentially inconsistent otherwise).
+crossedAboveLastPH = ta.crossover(close, lastPH)
+crossedBelowLastPL = ta.crossunder(close, lastPL)
+
+bullBOS = not na(lastPH) and not na(lastPL) and lastPHBar > lastPLBar and crossedAboveLastPH
+bearBOS = not na(lastPH) and not na(lastPL) and lastPLBar > lastPHBar and crossedBelowLastPL
 
 var string bias = ""
 var float anchor0 = na
@@ -157,10 +179,38 @@ bearMacdConfirm = macdLine < macdSignal and macdHist < macdHist[1]
 bullMomentum = bullRsiConfirm or bullMacdConfirm
 bearMomentum = bearRsiConfirm or bearMacdConfirm
 
+// Trend strength: ADX/DMI, used as an optional filter (like HTF/session) rather than
+// a 6th scored factor, so it can tighten signal quality without changing the /5 scale.
+[diPlus, diMinus, adxVal] = ta.dmi(adxLen, adxSmoothing)
+trending = adxVal >= adxThreshold
+
+// ---------------------------------------------------------------------- Volume analysis
+// Relative volume: participation vs. its own average.
 volMA = ta.sma(volume, volLen)
-volConfirm = volume > volMA
+rvol = volume / volMA
+
+// On-Balance Volume, read against its own trend (accumulation/distribution direction).
+var float obv = 0.0
+obv := obv + (close > close[1] ? volume : close < close[1] ? -volume : 0)
+obvEma = ta.ema(obv, obvTrendLen)
+obvUp   = obv > obvEma
+obvDown = obv < obvEma
+
+// Chaikin Money Flow: net buying/selling pressure over the same lookback.
+mfMultiplier = (high - low) != 0 ? ((close - low) - (high - close)) / (high - low) : 0.0
+mfVolume = mfMultiplier * volume
+cmf = math.sum(mfVolume, volLen) / math.sum(volume, volLen)
+
+// Composite volume confirmation: above-average participation AND OBV AND CMF all
+// agreeing with the trade direction — a real volume read, not just "above average".
+bullVolConfirm = rvol >= rvolThreshold and obvUp and cmf > 0
+bearVolConfirm = rvol >= rvolThreshold and obvDown and cmf < 0
 
 atr = ta.atr(atrLen)
+
+// VWAP — session-anchored, for visual/institutional reference (resets each session).
+vwapVal = ta.vwap(hlc3)
+plot(showVwap ? vwapVal : na, "VWAP", color = color.new(#8a8fa3, 0), linewidth = 1)
 
 // --------------------------------------------------------------- Pullback zone / bar
 inConfluenceZone = (isBull or isBear) and low <= confTop and high >= confBot
@@ -219,6 +269,7 @@ buildReasons(isCallBull) =>
     momentumHit = isCallBull ? bullMomentum : bearMomentum
     corrHit     = isCallBull ? bullCorrConfirm : bearCorrConfirm
     sweepHit    = isCallBull ? bullSweep : bearSweep
+    volHit      = isCallBull ? bullVolConfirm : bearVolConfirm
     tags = array.new<string>()
     if inConfluenceZone
         array.push(tags, "Confluence Zone")
@@ -226,13 +277,13 @@ buildReasons(isCallBull) =>
         array.push(tags, "Entry Zone Retest")
     if momentumHit
         array.push(tags, "Momentum")
-    if volConfirm
+    if volHit
         array.push(tags, "Volume")
     if corrHit
         array.push(tags, "Cross-Market")
     if sweepHit
         array.push(tags, "Liquidity Sweep")
-    score = (inConfluenceZone ? 1 : 0) + (momentumHit ? 1 : 0) + (volConfirm ? 1 : 0) + (corrHit ? 1 : 0) + (sweepHit ? 1 : 0)
+    score = (inConfluenceZone ? 1 : 0) + (momentumHit ? 1 : 0) + (volHit ? 1 : 0) + (corrHit ? 1 : 0) + (sweepHit ? 1 : 0)
     [score, array.join(tags, ", ")]
 
 [bullScore, bullReasons] = buildReasons(true)
@@ -248,8 +299,8 @@ breakoutPtnBroken = isBull ? close < breakoutPtn : isBear ? close > breakoutPtn 
 var int lastSignalBar = na
 cooledDown = na(lastSignalBar) or (bar_index - lastSignalBar) > cooldownBars
 
-bullSetup = isBull and inPullbackZone and bullReversalBar and not breakoutPtnBroken and (not requireHtfAlignment or htfUptrend) and (not useSessionFilter or inSession)
-bearSetup = isBear and inPullbackZone and bearReversalBar and not breakoutPtnBroken and (not requireHtfAlignment or htfDowntrend) and (not useSessionFilter or inSession)
+bullSetup = isBull and inPullbackZone and bullReversalBar and not breakoutPtnBroken and (not requireHtfAlignment or htfUptrend) and (not useSessionFilter or inSession) and (not requireTrendStrength or trending)
+bearSetup = isBear and inPullbackZone and bearReversalBar and not breakoutPtnBroken and (not requireHtfAlignment or htfDowntrend) and (not useSessionFilter or inSession) and (not requireTrendStrength or trending)
 
 bullCall = bullSetup and bullFactors >= minConfluence and cooledDown and barstate.isconfirmed
 bearCall = bearSetup and bearFactors >= minConfluence and cooledDown and barstate.isconfirmed
@@ -296,7 +347,7 @@ alertcondition(bearCall, "Institutional Short Call", "Institutional Fib Confluen
 alertcondition(breakoutPtnBroken, "Structure Invalidated", "Institutional Fib Confluence: Breakout Pattern level broken on {{ticker}} — bias invalidated")
 
 // --------------------------------------------------------------------------- Status table
-var table statusTable = table.new(position.top_right, 2, 6, border_width = 1)
+var table statusTable = table.new(position.top_right, 2, 9, border_width = 1)
 
 if showTable and barstate.islast
     biasCore  = isBull ? "BULL BOS" : isBear ? "BEAR BOS" : "NONE"
@@ -312,6 +363,11 @@ if showTable and barstate.islast
     rrA = (isBull or isBear) ? math.abs(alpha - close) / math.abs(close - activeStop) : na
     rrText = (isBull or isBear) ? str.tostring(rr1, "#.#") + " / " + str.tostring(rr2, "#.#") + " / " + str.tostring(rrA, "#.#") : "—"
     corrText = otherCorr1Name + " " + str.tostring(otherCorr1, "#.##") + " / " + otherCorr2Name + " " + str.tostring(otherCorr2, "#.##")
+    obvArrow = obvUp ? "↑" : obvDown ? "↓" : "→"
+    volText  = "RVOL " + str.tostring(rvol, "#.#") + "x | OBV " + obvArrow + " | CMF " + str.tostring(cmf, "#.##")
+    vwapDiff = close - vwapVal
+    vwapText = close > vwapVal ? "Above (+" + str.tostring(vwapDiff, format.mintick) + ")" : close < vwapVal ? "Below (" + str.tostring(vwapDiff, format.mintick) + ")" : "At"
+    trendText = "ADX " + str.tostring(adxVal, "#.#") + (trending ? " (trending)" : " (choppy)")
 
     table.cell(statusTable, 0, 0, "Bias", bgcolor = color.new(color.gray, 60))
     table.cell(statusTable, 1, 0, syminfo.root + " — " + biasCore + htfSuffix, bgcolor = color.new(color.gray, 60))
@@ -323,8 +379,14 @@ if showTable and barstate.islast
     table.cell(statusTable, 1, 3, stopText)
     table.cell(statusTable, 0, 4, "R:R (TP1/TP2/Alpha)")
     table.cell(statusTable, 1, 4, rrText)
-    table.cell(statusTable, 0, 5, "Correlation")
-    table.cell(statusTable, 1, 5, corrText)
+    table.cell(statusTable, 0, 5, "Volume")
+    table.cell(statusTable, 1, 5, volText)
+    table.cell(statusTable, 0, 6, "VWAP")
+    table.cell(statusTable, 1, 6, vwapText)
+    table.cell(statusTable, 0, 7, "Trend Strength")
+    table.cell(statusTable, 1, 7, trendText)
+    table.cell(statusTable, 0, 8, "Correlation")
+    table.cell(statusTable, 1, 8, corrText)
 
 // ---------------------------------------------------------------- Invalidation reset
 if breakoutPtnBroken

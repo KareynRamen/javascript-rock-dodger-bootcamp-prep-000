@@ -56,18 +56,50 @@ it reads as a band the way you actually draw it.
    counter-trend lower-timeframe noise.
 5. If a **Session Filter** is enabled, the bar must fall inside the
    configured session window (default 09:30–16:00 America/New_York).
-6. At least `minConfluence` (default 3, out of 5) of the following must also
+6. If **Require Trending Regime** is enabled (off by default, under `Trend
+   Strength (ADX/DMI)`), ADX must be at or above the threshold — a way to
+   suppress signals in a choppy, directionless tape without touching the
+   /5 scoring below.
+7. At least `minConfluence` (default 3, out of 5) of the following must also
    agree: being specifically in the Confluence Zone (vs. only the shallower
    Entry Zone), a Momentum turn (RSI turning up/down from a soft area, or a
    MACD histogram turn — either counts, so this is one factor, not two),
-   above-average Volume, Cross-Market correlation, and a **Liquidity
-   Sweep** — a wick that takes out the recent range extreme (stop hunt) and
-   reclaims it same bar, a stronger tell than a plain reversal candle on
-   its own.
+   **Volume** (see below — a composite, not just "above average"),
+   Cross-Market correlation, and a **Liquidity Sweep** — a wick that takes
+   out the recent range extreme (stop hunt) and reclaims it same bar, a
+   stronger tell than a plain reversal candle on its own.
 
 The status table shows this live, even before a call fires — a "Confluence"
 row like `2/5 — Confluence Zone, Volume` tells you exactly what's present
 and what's still missing, not just a bare score.
+
+### Volume analysis
+
+The "Volume" factor isn't just volume vs. its average — it's three real
+measures that all have to agree with the trade direction:
+
+- **Relative Volume (RVOL)** — current volume divided by its own average;
+  must clear a threshold (default 1.2x) so the bar actually has above-
+  normal participation, not just marginally more than average.
+- **On-Balance Volume (OBV)**, read against its own EMA — confirms the
+  cumulative volume flow is trending the same direction as the trade, not
+  just that this one bar was busy.
+- **Chaikin Money Flow (CMF)** — net buying vs. selling pressure over the
+  same lookback window, using each bar's close position within its range
+  weighted by volume; positive for a long, negative for a short.
+
+All three must agree, so "Volume" firing means real, sustained participation
+in the right direction — not one loud bar. The status table's Volume row
+shows the raw readings (e.g. `RVOL 1.4x | OBV ↑ | CMF +0.18`) so you can see
+which of the three is or isn't lining up, even when the factor doesn't fire.
+
+Two more TA reads are shown for context but don't gate the score:
+- **VWAP** (session-anchored) is plotted on the chart and shown in the table
+  as price's distance above/below it — a level institutional flow watches
+  closely for mean-reversion vs. trend-continuation reads.
+- **ADX/DMI** trend strength is shown in the table regardless of whether the
+  "Require Trending Regime" filter is on, so you can see the choppy/trending
+  read even when you're not gating on it.
 
 ### Cross-market correlation
 
@@ -98,10 +130,11 @@ of targets, not a wall of raw indicator values.
   Pattern, TP1, TP2, Alpha), the Confluence Zone as a shaded box, and a
   dedicated **Stop Loss** line once a bias is active (beyond the Breakout
   Pattern level, buffered by ATR)
-- A 6-row status table (top-right): Bias (symbol + BOS direction + whether
+- A 9-row status table (top-right): Bias (symbol + BOS direction + whether
   HTF agrees), Zone, Confluence (score out of 5 *and* which factors are
-  present, live, not just at signal time), Stop, R:R to TP1/TP2/Alpha, and
-  the cross-market correlation coefficients
+  present, live, not just at signal time), Stop, R:R to TP1/TP2/Alpha,
+  Volume (RVOL/OBV/CMF), VWAP position, ADX trend strength, and the
+  cross-market correlation coefficients
 - A labeled call box when a signal fires, e.g.:
 
   ```
@@ -156,9 +189,10 @@ of targets, not a wall of raw indicator values.
   doesn't size positions or manage open trades. Validate on the TradingView
   Strategy Tester or paper trade before risking capital.
 - Cross-market correlations are regime-dependent and can invert.
-- **No order flow.** Everything here comes from OHLCV bars — there's no
-  bid/ask imbalance, delta, CVD, or footprint data. The "Volume" factor is
-  a participation proxy (volume vs. its moving average), not real order
-  flow. Treat true order-flow reading (footprint/DOM) as a separate,
+- **No order flow.** Everything here — including RVOL, OBV, and CMF — comes
+  from OHLCV bars, not the actual tape. There's still no bid/ask imbalance,
+  real delta, or footprint/DOM data; CMF's "buying/selling pressure" is an
+  approximation from where each bar closes within its range, not executed
+  order flow. Treat true order-flow reading (footprint/DOM) as a separate,
   manual step alongside this indicator.
 - Educational/informational tool only — not financial advice.
